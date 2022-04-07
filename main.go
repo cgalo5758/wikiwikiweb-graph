@@ -9,6 +9,10 @@ import (
 	md "github.com/JohannesKaufmann/html-to-markdown"
 )
 
+// TODO:
+// - Turn title into markdown header
+// - convert links to obsidian markdown links
+
 // For every HTML file in a source directory
 //  1. Open the file.
 //  2. Extract a title from <title> HTML element.
@@ -30,7 +34,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Check if destination directory exists. Clear if not empty
+	// Check if destination directory exists. Clear if not empty.
+	// Create if it doesn't exist
 	if _, err := os.Stat(destDir); os.IsNotExist(err) {
 		err = os.Mkdir(destDir, 0755)
 		if err != nil {
@@ -57,7 +62,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err := writeMarkdown(destDir, title, body); err != nil {
+		if err := writeMarkdown(destDir, file, title, body); err != nil {
 			fmt.Println("Error writing markdown:", err)
 			os.Exit(1)
 		}
@@ -131,6 +136,7 @@ func getTitle(content []byte) string {
 	title := string(content)
 	title = strings.Split(title, "<title>")[1]
 	title = strings.Split(title, "</title>")[0]
+	title = "# " + title
 
 	return title
 }
@@ -152,14 +158,14 @@ func htmlToMarkdown(html string) string {
 		fmt.Println("Error converting HTML to Markdown:", err)
 		return ""
 	}
+	markdown = strings.ReplaceAll(markdown, "wiki%3F", "wiki?")
 	return markdown
 }
 
 // writeMarkdown writes a title and body to a markdown file.
-func writeMarkdown(dir, title, body string) error {
-	fileName := strings.Replace(title, " ", "-", -1)
-	fileName = strings.ToLower(fileName)
-	fileName = strings.TrimSuffix(fileName, ".html")
+func writeMarkdown(dir, fileName, title, body string) error {
+	//fileName := title
+	//fileName = strings.TrimSuffix(fileName, ".html")
 	fileName = fileName + ".md"
 
 	filePath := dir + "/" + fileName
