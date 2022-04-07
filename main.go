@@ -95,6 +95,7 @@ func getFilesRecursive(dir string) ([]string, error) {
 		return nil, err
 	}
 
+	// Get files in current directory
 	var allFiles []string
 	for _, file := range files {
 		if file.IsDir() {
@@ -158,7 +159,7 @@ func htmlToMarkdown(html string) string {
 		fmt.Println("Error converting HTML to Markdown:", err)
 		return ""
 	}
-	markdown = strings.ReplaceAll(markdown, "wiki%3F", "wiki?")
+	markdown = strings.ReplaceAll(markdown, "wiki%3F", "")
 	return markdown
 }
 
@@ -167,6 +168,9 @@ func writeMarkdown(dir, fileName, title, body string) error {
 	//fileName := title
 	//fileName = strings.TrimSuffix(fileName, ".html")
 	fileName = fileName + ".md"
+
+	// Remove "wiki?" from file name
+	fileName = strings.ReplaceAll(fileName, "wiki?", "")
 
 	filePath := dir + "/" + fileName
 
