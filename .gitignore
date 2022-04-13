@@ -1,4 +1,6 @@
 # Ignore result and wikiwikiweb directories
 result/
 wikiwikiweb/
-result2/
+
+# Ignore config files
+config.yaml
