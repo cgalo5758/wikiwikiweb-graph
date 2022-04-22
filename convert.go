@@ -3,21 +3,22 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
+	"regexp"
 	"strings"
+	"time"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 )
 
 func html2md(sourceDir, destDir string) {
-	files, err := getFiles(sourceDir)
-	if err != nil {
-		fmt.Println("Error getting files:", err)
-		os.Exit(1)
+	// Check if source directory exists
+	if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
+		fmt.Println("Error: source directory does not exist:", sourceDir)
+		return
 	}
-
-	// Check if destination directory exists. Clear if not empty.
-	// Create if it doesn't exist
+	// Check if destination directory exists.
 	if _, err := os.Stat(destDir); os.IsNotExist(err) {
 		err = os.Mkdir(destDir, 0755)
 		if err != nil {
@@ -25,11 +26,13 @@ func html2md(sourceDir, destDir string) {
 			os.Exit(1)
 		}
 	} else {
+		// Clear destination directory
 		err = os.RemoveAll(destDir)
 		if err != nil {
 			fmt.Println("Error clearing destination directory:", err)
 			os.Exit(1)
 		}
+		// Create destination directory
 		err = os.Mkdir(destDir, 0755)
 		if err != nil {
 			fmt.Println("Error creating destination directory:", err)
@@ -37,13 +40,23 @@ func html2md(sourceDir, destDir string) {
 		}
 	}
 
+	// Get list of HTML files in source directory
+	files, err := getFilesList(sourceDir)
+	if err != nil {
+		fmt.Println("Error getting files:", err)
+		os.Exit(1)
+	}
+
+	// Get a list of 100 random files to convert
+	files = getRandomFiles(files, 100)
+
+	// Read HTML files to memory and convert to Markdown
 	for _, file := range files {
 		title, body, err := getTitleAndBody(sourceDir, file)
 		if err != nil {
 			fmt.Println("Error getting title and body:", err)
 			os.Exit(1)
 		}
-
 		if err := writeMarkdown(destDir, file, title, body); err != nil {
 			fmt.Println("Error writing markdown:", err)
 			os.Exit(1)
@@ -51,8 +64,8 @@ func html2md(sourceDir, destDir string) {
 	}
 }
 
-// getFiles returns a list of HTML files in a directory.
-func getFiles(dir string) ([]string, error) {
+// getFilesList returns a list of HTML files in a directory.
+func getFilesList(dir string) ([]string, error) {
 	files, err := getFilesRecursive(dir)
 	if err != nil {
 		fmt.Println("Error getting files:", err)
@@ -108,14 +121,14 @@ func getTitleAndBody(sourceDir, file string) (string, string, error) {
 		return "", "", err
 	}
 
-	title := getTitle(content)
+	title := getHtmlTitle(content)
 	body := getBody(content)
 
 	return title, body, nil
 }
 
-// getTitle returns the extracted title between <title> HTML element tags.
-func getTitle(content []byte) string {
+// getHtmlTitle returns the extracted title between <title> HTML element tags.
+func getHtmlTitle(content []byte) string {
 	title := string(content)
 	title = strings.Split(title, "<title>")[1]
 	title = strings.Split(title, "</title>")[0]
@@ -141,14 +154,18 @@ func htmlToMarkdown(html string) string {
 		fmt.Println("Error converting HTML to Markdown:", err)
 		return ""
 	}
-	markdown = strings.ReplaceAll(markdown, "wiki%3F", "")
+
+	re := regexp.MustCompile(`(?m)\(wiki\%3F(.*?)\.html\)`)
+	substitution := "($1)"
+
+	markdown = re.ReplaceAllString(markdown, substitution)
 	return markdown
 }
 
 // writeMarkdown writes a title and body to a markdown file.
 func writeMarkdown(dir, fileName, title, body string) error {
 	//fileName := title
-	//fileName = strings.TrimSuffix(fileName, ".html")
+	fileName = strings.TrimSuffix(fileName, ".html")
 	fileName = fileName + ".md"
 
 	// Remove "wiki?" from file name
@@ -170,4 +187,16 @@ func writeMarkdown(dir, fileName, title, body string) error {
 	}
 
 	return nil
+}
+
+// getRandomFiles returns a list of random files from a list of files.
+func getRandomFiles(files []string, num int) []string {
+	if num > len(files) {
+		num = len(files)
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	rand.Shuffle(len(files), func(i, j int) { files[i], files[j] = files[j], files[i] })
+
+	return files[:num]
 }

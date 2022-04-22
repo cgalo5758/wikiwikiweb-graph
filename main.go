@@ -28,10 +28,16 @@ func main() {
 		}
 		check()
 	case "export":
-		if len(os.Args) != 4 {
-			fmt.Println("Usage: www-graph export <source-dir> <dest-dir>")
+		if len(os.Args) != 3 {
+			fmt.Println("Usage: www-graph export <source-dir>")
 			os.Exit(1)
 		}
-		export(os.Args[2], os.Args[3])
+		export(os.Args[2])
+	case "clear":
+		if len(os.Args) != 2 {
+			fmt.Println("Usage: www-graph clear")
+			os.Exit(1)
+		}
+		clearDatabase()
 	}
 }
