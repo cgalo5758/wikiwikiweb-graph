@@ -62,37 +62,7 @@ func export(sourceDir string) {
 		panic(err)
 	}
 
-	// Get listSize of list and round up to nearest factor of batchSize
-	listSize := len(files)
-	batchSize := 256
-	batches := listSize / batchSize
-
-	if listSize%batchSize != 0 {
-		batches++
-	}
-	listSize = batches * batchSize
-
-	// create a slice of maps to store nodes.
-	var nodes []map[string]interface{}
-
-	// Make a slice of string arrays of size 2 to store relationships
-	relationships := make([][2]string, 0)
-
-	// For each markdown file
-	for _, file := range files {
-		// Extract title and store in a node map
-		node := getNode(file)
-		// insert node to nodes slice
-		nodes = append(nodes, node)
-		// Build relationship strings from internal links
-		nodeRelationships := getRelationships(file)
-		// Add relationships to relationships slice
-		relationships = append(relationships, nodeRelationships...)
-	}
-
-	// adjust capacity of nodes slice to match listSize
-	remainderLen := listSize - len(nodes)
-	nodes = append(nodes, make([]map[string]interface{}, remainderLen)...)
+	nodes, relationships := getFilesAsGraph(files)
 
 	// Create a neo4j driver and defer closing it
 	driver := getDriver()
@@ -106,87 +76,40 @@ func export(sourceDir string) {
 	}
 	defer session.Close()
 
-	// Create a slice of strings to store cypher queries
-	queries := make([]string, 0)
-	// Create a slice of string arrays to store cypher parameters
-	params := make([]map[string]interface{}, 0)
-
-	// Build a cypher query per batch to create nodes
-	for batch := 0; batch < batches; batch++ {
-		// Build cypher query that:
-		// - unwinds the nodes in the current batch
-		// - creates a node for each node in the current batch
-		// - returns the nodes created
-		query := "UNWIND $nodes AS node CREATE (n:Page {title: node.title})"
-		// Get parameters for the current batch, without empty nodes
-		parameters := map[string]interface{}{"nodes": nodes[batch*batchSize : (batch+1)*batchSize]}
-		// Resize parameters to only include nodes which are not empty. Only on last batch
-		if batch == batches-1 {
-			parameters["nodes"] = parameters["nodes"].([]map[string]interface{})[:len(parameters["nodes"].([]map[string]interface{}))-remainderLen]
-		}
-		// Print cypher query
-		fmt.Println("cypher query:", query)
-		// print cypher parameters
-		fmt.Println("cypher parameters:", parameters)
-		// Add query to queries slice
-		queries = append(queries, query)
-		// Add parameters to params slice
-		params = append(params, parameters)
-	}
-
-	// Execute the cypher queries
-	for i, query := range queries {
-		// Get parameters for the current query
-		queryParams := params[i]
-		// Execute the cypher query
+	// Build graph in Neo4j using cypher queries
+	// Create nodes
+	for _, node := range nodes {
+		// Create node
+		cypher := fmt.Sprintf("CREATE (n:Page {title:'%s'})", node)
+		fmt.Println(cypher)
 		_, err := session.WriteTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-			result, err := tx.Run(query, queryParams)
+			result, err := tx.Run(cypher, nil)
 			if err != nil {
 				return nil, err
 			}
-			return result.Collect()
+			return result, nil
 		})
 		if err != nil {
 			fmt.Println("Error:", err)
 			panic(err)
 		}
 	}
-
-	// For each batch of relationships
-	for i := 0; i < len(relationships); i += 256 {
-		// Build a cypher query to:
-		//   - match nodes by title in the relationship string array
-		//   - merge relationship between matched nodes
-		//   - return the merged nodes
-		cypher := "UNWIND $source as source" +
-			" UNWIND $target as target" +
-			" MATCH (source:Page {title: source})" +
-			" MATCH (target:Page {title: target})" +
-			" MERGE (source)-[r:LINKED_TO]->(target)" +
-			" RETURN source, target"
-		// Print relationship batch
-		fmt.Println("relationship batch:", relationships[i:i+256])
-		// Print cypher query
-		fmt.Println("cypher query:", cypher)
-		// Execute the cypher query with a write transaction
-		//   - Handle any errors
-		//   - Verify the number of nodes created
-		// _, err = session.WriteTransaction(func(tx neo4j.Transaction) (interface{}, error) {
-		// 	result, err := tx.Run(cypher, map[string]interface{}{
-		// 		"source": relationships[i : i+256][0], "target": relationships[i : i+256][1],
-		// 	})
-		// 	if err != nil {
-		// 		return "", err
-		// 	}
-		// 	if result.Next() {
-		// 		fmt.Println("Relationships created:", result.Record().GetByIndex(0))
-		// 	}
-		// 	return nil, err
-		// })
-		// if err != nil {
-		// 	fmt.Println("Error:", err)
-		// 	panic(err)
-		// }
+	// Create relationships
+	for _, relationship := range relationships {
+		// Create relationship
+		cypher := fmt.Sprintf("MATCH (n:Page {title:'%s'}), (m:Page {title:'%s'}) CREATE (n)-[:LINKS_TO]->(m)", relationship[0], relationship[1])
+		fmt.Println(cypher)
+		_, err := session.WriteTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+			result, err := tx.Run(cypher, nil)
+			if err != nil {
+				return nil, err
+			}
+			return result, nil
+		})
+		if err != nil {
+			fmt.Println("Error:", err)
+			panic(err)
+		}
 	}
 
 	// Print success message
@@ -313,4 +236,20 @@ func clearDatabase() {
 
 	// Print success message
 	fmt.Println("Neo4j clear successful")
+}
+
+func getFilesAsGraph(files []string) ([]string, [][2]string) {
+	// Create a slice of strings to store the nodes
+	nodes := make([]string, 0)
+	// Create a slice of [2]strings to store the relationships
+	relationships := make([][2]string, 0) // [source, destination]])
+
+	// For each markdown file
+	for _, file := range files {
+		// Extract title and store in a node slice
+		nodes = append(nodes, getTitle(file))
+		// Extract relationships and store in a relationship slice
+		relationships = append(relationships, getRelationships(file)...)
+	}
+	return nodes, relationships
 }
