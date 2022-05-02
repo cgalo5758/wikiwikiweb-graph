@@ -47,8 +47,8 @@ func html2md(sourceDir, destDir string) {
 		os.Exit(1)
 	}
 
-	// Get a list of 100 random files to convert
-	files = getRandomFiles(files, 100)
+	// // Get a list of 256 random files to convert
+	// files = getRandomFiles(files, 1024)
 
 	// Read HTML files to memory and convert to Markdown
 	for _, file := range files {

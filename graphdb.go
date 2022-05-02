@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v4/neo4j"
 	"github.com/spf13/viper"
@@ -132,16 +133,8 @@ func getFiles(sourceDir string) ([]string, error) {
 	return files, nil
 }
 
-// Get node map
-func getNode(file string) map[string]interface{} {
-	// Extract title and store in a node map
-	node := make(map[string]interface{})
-	node["title"] = getTitle(file)
-	return node
-}
-
-// Get title: filename minus .md
-func getTitle(file string) string {
+// Get Markdown title in CamelCase filename minus .md
+func getMarkdownTitleCamelCase(file string) string {
 	// Remove directory path from filename
 	filename := filepath.Base(file)
 	// Extract filename and title and store in a node map
@@ -155,7 +148,7 @@ func getRelationships(file string) [][2]string {
 	links := getLinks(file)
 	relationships := make([][2]string, 0)
 	for _, link := range links {
-		relationships = append(relationships, [2]string{getTitle(file), getTitle(link)})
+		relationships = append(relationships, [2]string{getMarkdownTitleCamelCase(file), link})
 	}
 	return relationships
 }
@@ -181,19 +174,14 @@ func getLinks(file string) []string {
 	// Parse markdown text
 	markdown := string(b)
 	// Match all links
-	re := regexp.MustCompile(`\[.*?\]\(.*?\)`)
+	re := regexp.MustCompile(`(?mU)\[([^\[]+)\](\(.*\))`)
 	links := re.FindAllString(markdown, -1)
+
 	// Keep only destination of link
 	re = regexp.MustCompile(`\(.*?\)`)
 	for i, link := range links {
 		links[i] = re.FindString(link)
 		links[i] = links[i][1 : len(links[i])-1]
-	}
-	// Remove external links with http uris
-	re = regexp.MustCompile(`\[.*?\]\(http.*?\)`)
-	links = re.FindAllString(markdown, -1)
-	for i, link := range links {
-		links[i] = link[1 : len(link)-1]
 	}
 	return links
 }
@@ -247,9 +235,59 @@ func getFilesAsGraph(files []string) ([]string, [][2]string) {
 	// For each markdown file
 	for _, file := range files {
 		// Extract title and store in a node slice
-		nodes = append(nodes, getTitle(file))
+		nodes = append(nodes, getMarkdownTitleCamelCase(file))
 		// Extract relationships and store in a relationship slice
 		relationships = append(relationships, getRelationships(file)...)
 	}
-	return nodes, relationships
+
+	// Discard and log relationships where the destination node is not in the nodes slice
+	var discardedDestinations []string
+
+	var internalLinkRelationships [][2]string
+
+	for _, relationship := range relationships {
+		// Check destination node in relationship string array against nodes slice
+		if !contains(nodes, relationship[1]) {
+			// If not in nodes slice, add to discardedDestinations slice
+			discardedDestinations = append(discardedDestinations, relationship[1])
+		} else {
+			// If in nodes slice, add to internalLinkRelationships slice
+			internalLinkRelationships = append(internalLinkRelationships, relationship)
+		}
+	}
+	// Log discarded relationships log folder and file
+	logFolder := "./logs"
+
+	// Create log folder if it does not exist
+	if _, err := os.Stat(logFolder); os.IsNotExist(err) {
+		os.Mkdir(logFolder, 0755)
+	}
+
+	// Name log file based on time
+	logFile := logFolder + "/" + time.Now().Format(time.RFC3339)
+	// Create log file
+	f, err := os.Create(logFile)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	// Write log file
+	f.WriteString("Discarded relationships:")
+	for _, discardedDestination := range discardedDestinations {
+		f.WriteString("\n" + discardedDestination)
+	}
+	// Print success message
+	fmt.Println("Discarded relationships logged to:", logFile)
+
+	// Return nodes and relationships
+	return nodes, internalLinkRelationships
+}
+
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }

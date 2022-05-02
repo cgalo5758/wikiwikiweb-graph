@@ -2,5 +2,8 @@
 result/
 wikiwikiweb/
 
+# Ignore logs
+logs/
+
 # Ignore config files
 config.yaml
