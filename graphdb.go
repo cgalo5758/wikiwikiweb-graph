@@ -277,15 +277,41 @@ func getFilesAsGraph(files []string) ([]string, [][2]string) {
 		f.WriteString("\n" + discardedDestination)
 	}
 	// Print success message
-	fmt.Println("Discarded relationships logged to:", logFile)
+	fmt.Println("Discarded internal link relationships logged to:", logFile)
+
+	// Remove internalLinkRelationships where source and target are the same
+	var filteredInternalLinkRelationships [][2]string
+	for _, relationship := range internalLinkRelationships {
+		if relationship[0] != relationship[1] {
+			filteredInternalLinkRelationships = append(filteredInternalLinkRelationships, relationship)
+		}
+	}
+
+	// Remove duplicates from filteredInternalLinkRelationships
+	var uniqueInternalLinkRelationships [][2]string
+	for _, relationship := range filteredInternalLinkRelationships {
+		if !containsRelationship(uniqueInternalLinkRelationships, relationship) {
+			uniqueInternalLinkRelationships = append(uniqueInternalLinkRelationships, relationship)
+		}
+	}
 
 	// Return nodes and relationships
-	return nodes, internalLinkRelationships
+	return nodes, uniqueInternalLinkRelationships
 }
 
 func contains(s []string, e string) bool {
 	for _, a := range s {
 		if a == e {
+			return true
+		}
+	}
+	return false
+}
+
+// Check if relationship is already in slice
+func containsRelationship(s [][2]string, e [2]string) bool {
+	for _, a := range s {
+		if a[0] == e[0] && a[1] == e[1] {
 			return true
 		}
 	}
